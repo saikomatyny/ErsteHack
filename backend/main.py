@@ -1,5 +1,7 @@
 import fastapi
 
+from routers import users
+
 app = fastapi.FastAPI()
 
 @app.get("/")
