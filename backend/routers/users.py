@@ -45,6 +45,7 @@ class User(BaseModel):
     organization_id: str = Field(..., alias="organization_id")
     created_date: str = Field(..., alias="created_date")
     last_modified_date: str = Field(..., alias="last_modified_date")
+    created_by: str = Field(..., alias="created_by")
     
     model_config = ConfigDict(
         populate_by_name=True,
@@ -59,6 +60,7 @@ class User(BaseModel):
                 "organization_id": "1",
                 "created_date": "2023-09-28 22:57:45",
                 "last_modified_date": "2023-09-28 22:57:46",
+                "created_by" : "1",
             }
         },
     )
@@ -73,7 +75,6 @@ class UpdateUser(BaseModel):
     vat_rate: Optional[float] = Field(None, alias="vat_rate")
     category: Optional[str] = Field(None, alias="category")
     organization_id: Optional[str] = Field(None, alias="organization_id")
-    created_date: Optional[str] = Field(None, alias="created_date")
     last_modified_date: Optional[str] = Field(None, alias="last_modified_date")
 
     model_config = ConfigDict(
@@ -86,7 +87,6 @@ class UpdateUser(BaseModel):
                 "vat_rate": 20.0,
                 "category": "drinks/non-alcoholic",
                 "organization_id": "1",
-                "created_date": "2023-09-28 22:57:45",
                 "last_modified_date": "2023-09-28 22:57:46",
             }
         },
@@ -106,7 +106,7 @@ class Koef(BaseModel):
     Container for a single koef record.
     """
     id: Optional[PyObjectId] = Field(alias="id", default=None)
-    organization_id: str = Field(..., alias="organization_id")
+    created_by: str = Field(..., alias="created_by")
     koef: int = Field(..., alias="koef")
     
     model_config = ConfigDict(
@@ -114,7 +114,7 @@ class Koef(BaseModel):
         arbitrary_types_allowed=True,
         json_schema_extra={
             "example": {
-                "organization_id": "1",
+                "created_by": "1",
                 "koef": 2,
             }
         },
@@ -131,7 +131,7 @@ class UpdateKoef(BaseModel):
         json_encoders={ObjectId: str},
         json_schema_extra={
             "example": {
-                "organization_id": "1",
+                "created_by": "1",
                 "koef": 2,
             }
         },
@@ -192,11 +192,12 @@ async def upload_csv(file: UploadFile = File(...)):
             "category": row["category"].strip(),
             "organization_id": row["organization_id"].strip(),
             "created_date": row["created_date"],
+            "created_by": row["created_by"],
             "last_modified_date": row["last_modified_date"],
         }
         users_to_insert.append(user_data)
         koef_data = {
-            "organization_id": row["organization_id"].strip(),
+            "created_by": row["created_by"].strip(),
             "koefficient": 2,
         }
         koefs_to_insert.append(koef_data)
@@ -245,28 +246,28 @@ async def update_user(id_product: str, user: UpdateUser = Body(...)):
 
 
 @router.put(
-    "/users/turn_off_notif/{organization_id}",
+    "/users/turn_off_notif/{created_by}",
     response_description="Update a koefficient and turn off notifications",
     response_model=None,
     response_model_by_alias=False,
 )
-async def update_koef(organization_id: str):
+async def update_koef(created_by: str):
     """
     Find the user by organization_id and increment koef by 1.
     """
     # Выполняем обновление
     update_result = await koefs_collection.find_one_and_update(
-        {"organization_id": organization_id},  # Поиск по organization_id
+        {"created_by": created_by},  # Поиск по created_by
         {"$inc": {"koefficient": 1}},  # Инкремент коэфициента на 1
         return_document=ReturnDocument.AFTER  # Возвращаем обновленный документ
     )
 
     if update_result:
         return {
-            "organization_id": update_result["organization_id"],
+            "created_by": update_result["created_by"],
             "koefficient": update_result["koefficient"]
         }
     else:
-        raise HTTPException(status_code=404, detail=f"User with organization_id {organization_id} not found")
+        raise HTTPException(status_code=404, detail=f"User with organization_id {created_by} not found")
     
     
