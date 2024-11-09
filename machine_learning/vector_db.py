@@ -25,5 +25,4 @@ def search_same_transactions(df, query: str):
 
     distances, indices = index.search(search_query, k)
 
-    return indices
-
+    return orders.iloc[indices]
