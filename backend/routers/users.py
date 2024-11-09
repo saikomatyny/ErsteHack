@@ -29,6 +29,7 @@ PyObjectId = Annotated[str, BeforeValidator(str)]
 
 db = client.get_database("main")
 user_collection = db.get_collection("analytics")
+koefs_collection = db.get_collection("koefs")
 
 
 class User(BaseModel):
@@ -100,6 +101,51 @@ class UserCollections(BaseModel):
 
     users: List[User]
 
+class Koef(BaseModel):
+    """
+    Container for a single koef record.
+    """
+    id: Optional[PyObjectId] = Field(alias="id", default=None)
+    organization_id: str = Field(..., alias="organization_id")
+    koef: int = Field(..., alias="koef")
+    
+    model_config = ConfigDict(
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        json_schema_extra={
+            "example": {
+                "organization_id": "1",
+                "koef": 2,
+            }
+        },
+    )
+
+class UpdateKoef(BaseModel):
+    """
+    Update a single koef record.
+    """
+    koef: Optional[int] = Field(None, alias="koef")
+    
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+        json_encoders={ObjectId: str},
+        json_schema_extra={
+            "example": {
+                "organization_id": "1",
+                "koef": 2,
+            }
+        },
+    )
+
+class KoefCollections(BaseModel):
+    """
+    A container holding a list of `KoefModel` instances.
+
+    This exists because providing a top-level array in a JSON response can be a [vulnerability](https://haacked.com/archive/2009/06/25/json-hijacking.aspx/)
+    """
+
+    koefs: List[Koef]
+
 
 @router.get(
     "/users/",
@@ -134,6 +180,7 @@ async def upload_csv(file: UploadFile = File(...)):
     
     reader = csv.DictReader(csv_file)
     users_to_insert = []
+    koefs_to_insert = []
 
     for row in reader:
         # Извлекаем только нужные поля и преобразуем типы данных, если нужно
@@ -145,25 +192,33 @@ async def upload_csv(file: UploadFile = File(...)):
             "category": row["category"].strip(),
             "organization_id": row["organization_id"].strip(),
             "created_date": row["created_date"],
-            "last_modified_date": row["last_modified_date"]
+            "last_modified_date": row["last_modified_date"],
         }
         users_to_insert.append(user_data)
+        koef_data = {
+            "organization_id": row["organization_id"].strip(),
+            "koefficient": 2,
+        }
+        koefs_to_insert.append(koef_data)
     
     if users_to_insert:
         await user_collection.insert_many(users_to_insert)  # вставляем все записи одной операцией
+    koefs_to_insert = [dict(t) for t in {tuple(d.items()) for d in koefs_to_insert}]
+    if koefs_to_insert:
+        await koefs_collection.insert_many(koefs_to_insert)
 
     return {"message": f"{len(users_to_insert)} users added successfully from CSV."}
 
 
 @router.put(
     "/users/{id_product}",
-    response_description="Update a user",
+    response_description="Update a product",
     response_model=User,
     response_model_by_alias=False,
 )
 async def update_user(id_product: str, user: UpdateUser = Body(...)):
     """
-    Update individual fields of an existing user record.
+    Update individual fields of an existing product record.
 
     Only the provided fields will be updated.dialog.promptd.
     """
@@ -187,3 +242,31 @@ async def update_user(id_product: str, user: UpdateUser = Body(...)):
         return existing_user
 
     raise HTTPException(status_code=404, detail=f"user {id_product} not found")
+
+
+@router.put(
+    "/users/turn_off_notif/{organization_id}",
+    response_description="Update a koefficient and turn off notifications",
+    response_model=None,
+    response_model_by_alias=False,
+)
+async def update_koef(organization_id: str):
+    """
+    Find the user by organization_id and increment koef by 1.
+    """
+    # Выполняем обновление
+    update_result = await koefs_collection.find_one_and_update(
+        {"organization_id": organization_id},  # Поиск по organization_id
+        {"$inc": {"koefficient": 1}},  # Инкремент коэфициента на 1
+        return_document=ReturnDocument.AFTER  # Возвращаем обновленный документ
+    )
+
+    if update_result:
+        return {
+            "organization_id": update_result["organization_id"],
+            "koefficient": update_result["koefficient"]
+        }
+    else:
+        raise HTTPException(status_code=404, detail=f"User with organization_id {organization_id} not found")
+    
+    
