@@ -138,6 +138,7 @@ async def upload_csv(file: UploadFile = File(...)):
     for row in reader:
         # Извлекаем только нужные поля и преобразуем типы данных, если нужно
         user_data = {
+            "id_product": row["id"].strip(),
             "name": row["name"].strip(),
             "price": float(row["price"]),
             "vat_rate": float(row["vat_rate"]),
